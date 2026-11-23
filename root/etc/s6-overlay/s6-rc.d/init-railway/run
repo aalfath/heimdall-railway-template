@@ -24,6 +24,7 @@ fi
 [[ -z "${WORKERS}" || "${WORKERS}" -lt 1 ]] && WORKERS=2
 [[ "${WORKERS}" -gt 4 ]] && WORKERS=4
 printf 'worker_processes %s;\n' "${WORKERS}" >/config/nginx/worker_processes.conf
+echo "[railway] nginx worker_processes ${WORKERS}"
 [[ -f /config/nginx/nginx.conf ]] && sed -i 's#^error_log .*#error_log stderr;#' /config/nginx/nginx.conf
 
 # PHP and php-fpm limits sized for a 512 MB service.
@@ -31,8 +32,8 @@ mkdir -p /config/php
 install -m 0644 /defaults/railway/php.ini /config/php/zz-railway.ini
 install -m 0644 /defaults/railway/fpm.conf /config/php/zz-railway.conf
 
-# Keep sessions and the app catalogue on the volume, next to Heimdall's other
-# state, so a redeploy neither signs users out nor breaks the add-item form.
+# Keep login sessions on the volume, next to Heimdall's other state, so a
+# redeploy doesn't sign everyone out.
 link_to_config() {  # <path in app> <path on volume>
     local src="$1" dst="$2"
     if [[ -e "${src}" && ! -L "${src}" ]]; then
@@ -44,7 +45,6 @@ link_to_config() {  # <path in app> <path on volume>
 }
 mkdir -p /config/www/sessions
 link_to_config "${APP_DIR}/storage/framework/sessions" /config/www/sessions
-link_to_config "${APP_DIR}/storage/app/supportedapps.json" /config/www/supportedapps.json
 
 # Admin credentials: written on first boot, and again only when the variables
 # change. A password changed later in Heimdall's UI is left alone.
