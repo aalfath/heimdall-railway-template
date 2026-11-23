@@ -9,12 +9,14 @@ ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
     TZ=Etc/UTC \
     TRUSTED_PROXIES=* \
     QUEUE_CONNECTION=database \
+    LOG_LEVEL=warning \
     PORT=8080
 
 # QUEUE_CONNECTION=database: Heimdall's .env still says "sync" (the image only
 # rewrites the old QUEUE_DRIVER key), so every page load would download the app
 # catalogue inline and answer 500 whenever appslist.heimdall.site is slow or
 # down. With "database" the bundled queue worker does it in the background.
+# LOG_LEVEL=warning: upstream logs DEBUG lines to the volume on every request.
 # TRUSTED_PROXIES=*: trust Railway's edge for X-Forwarded-Proto/For, so links
 # are https. (X-Forwarded-Host is never trusted upstream, CVE-2025-50578.)
 
