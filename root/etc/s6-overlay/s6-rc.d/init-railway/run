@@ -1,0 +1,69 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Heimdall on Railway: runs after init-config-end, before init-services.
+# Any failure exits non-zero; with S6_BEHAVIOUR_IF_STAGE2_FAILS=2 the
+# container then stops with an error instead of serving an open dashboard.
+set -euo pipefail
+
+APP_DIR=/app/www
+echo "[railway] preparing Heimdall"
+
+# nginx: plain HTTP on $PORT (Railway's edge does TLS), rewritten every boot.
+LISTEN_PORT="${PORT:-8080}"
+[[ "${LISTEN_PORT}" =~ ^[0-9]+$ ]] || LISTEN_PORT=8080
+mkdir -p /config/nginx/site-confs
+sed "s|__PORT__|${LISTEN_PORT}|g" /defaults/railway/site.conf >/config/nginx/site-confs/default.conf
+echo "[railway] nginx listens on ${LISTEN_PORT}"
+
+# nginx workers from the service's CPU quota, not the host's core count.
+WORKERS=""
+if [[ -r /sys/fs/cgroup/cpu.max ]]; then
+    read -r Q P </sys/fs/cgroup/cpu.max || true
+    if [[ "${Q:-max}" != "max" && "${P:-0}" -gt 0 ]]; then WORKERS=$(( (Q + P - 1) / P )); fi
+fi
+[[ -z "${WORKERS}" || "${WORKERS}" -lt 1 ]] && WORKERS=2
+[[ "${WORKERS}" -gt 4 ]] && WORKERS=4
+printf 'worker_processes %s;\n' "${WORKERS}" >/config/nginx/worker_processes.conf
+[[ -f /config/nginx/nginx.conf ]] && sed -i 's#^error_log .*#error_log stderr;#' /config/nginx/nginx.conf
+
+# PHP and php-fpm limits sized for a 512 MB service.
+mkdir -p /config/php
+install -m 0644 /defaults/railway/php.ini /config/php/zz-railway.ini
+install -m 0644 /defaults/railway/fpm.conf /config/php/zz-railway.conf
+
+# Keep sessions and the app catalogue on the volume, next to Heimdall's other
+# state, so a redeploy neither signs users out nor breaks the add-item form.
+link_to_config() {  # <path in app> <path on volume>
+    local src="$1" dst="$2"
+    if [[ -e "${src}" && ! -L "${src}" ]]; then
+        if [[ -d "${src}" ]]; then mkdir -p "${dst}"; cp -a "${src}/." "${dst}/" 2>/dev/null || true; rm -r "${src}";
+        elif [[ -e "${dst}" ]]; then rm -- "${src}";
+        else mv "${src}" "${dst}"; fi
+    fi
+    [[ -L "${src}" ]] || ln -s "${dst}" "${src}"
+}
+mkdir -p /config/www/sessions
+link_to_config "${APP_DIR}/storage/framework/sessions" /config/www/sessions
+link_to_config "${APP_DIR}/storage/app/supportedapps.json" /config/www/supportedapps.json
+
+# Admin credentials: written on first boot, and again only when the variables
+# change. A password changed later in Heimdall's UI is left alone.
+ADMIN_USER="${HEIMDALL_ADMIN_USERNAME:-admin}"
+ADMIN_PASS="${HEIMDALL_ADMIN_PASSWORD:-}"
+if [[ -z "${ADMIN_PASS}" ]]; then
+    echo "[railway] error: HEIMDALL_ADMIN_PASSWORD is not set; refusing to start an open dashboard"
+    exit 1
+fi
+STAMP_FILE=/config/.railway-admin-stamp
+WANT="$(printf '%s:%s' "${ADMIN_USER}" "${ADMIN_PASS}" | sha256sum | cut -d' ' -f1)"
+HAVE="$(cat "${STAMP_FILE}" 2>/dev/null || true)"
+APPLY=0; [[ "${WANT}" != "${HAVE}" ]] && APPLY=1
+
+lsiown -R abc:abc /config/www
+HEIMDALL_ADMIN_USERNAME="${ADMIN_USER}" HEIMDALL_ADMIN_PASSWORD="${ADMIN_PASS}" RAILWAY_APPLY_ADMIN="${APPLY}" \
+    s6-setuidgid abc php "/railway/admin.php"
+if [[ "${APPLY}" == "1" ]]; then printf '%s\n' "${WANT}" >"${STAMP_FILE}"; chmod 600 "${STAMP_FILE}"; fi
+lsiown -R abc:abc /config/www /config/php
+
+nginx -t -q
+echo "[railway] Heimdall is ready"
