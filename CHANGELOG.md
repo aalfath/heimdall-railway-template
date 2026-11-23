@@ -6,7 +6,7 @@
 - Admin password set from `HEIMDALL_ADMIN_PASSWORD` (generated) before the web server starts; no open first-boot window.
 - nginx listens on `PORT`; nginx and PHP-FPM workers sized for a 0.5 GB service.
 - Database queue (`QUEUE_CONNECTION=database`), so the app catalogue downloads in the background and pages don't fail when the catalogue site is slow.
-- Volume at `/config` for the database, uploads, sessions and the app catalogue.
+- Volume at `/config` for the database, app key, uploads, sessions and downloaded app definitions.
 - Queue worker pauses 5 s before each start, so an unreachable app catalogue site cannot make it restart every second.
 - Laravel log level `warning` (upstream writes DEBUG lines to the volume on every request).
 - Health check `/up`; a failed init step exits non-zero so Railway restarts the service.

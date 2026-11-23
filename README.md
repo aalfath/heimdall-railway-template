@@ -9,7 +9,7 @@ One-click Railway template for [Heimdall](https://github.com/linuxserver/Heimdal
 One service, **Heimdall**, built from this repo's `Dockerfile`:
 
 - the official LinuxServer.io image `linuxserver/heimdall:v2.8.4-ls375` (Heimdall 2.8.4), pinned by digest (`sha256:51693bcb3a46e619592a4f7aad65d6610f8bda80c3b167d03254a96a944e8aed`). It runs nginx, PHP-FPM and Heimdall's background queue worker in one container;
-- a volume at `/config` holding everything Heimdall stores: the SQLite database, `.env` (with the app key), uploaded icons and backgrounds, login sessions and the downloaded app catalogue;
+- a volume at `/config` holding everything Heimdall stores: the SQLite database, `.env` (with the app key), uploaded icons and backgrounds, login sessions and the app definitions Heimdall downloads for enhanced tiles (the catalogue list itself is fetched again in the background at each start);
 - an extra init step (`root/etc/s6-overlay/s6-rc.d/init-railway`) that, before the web server starts, renders nginx for Railway's `PORT`, sizes nginx and PHP-FPM for a small service, and sets the admin password from `HEIMDALL_ADMIN_PASSWORD`. Stock Heimdall starts with a passwordless admin, which on a public URL would be an open, editable dashboard; this template never serves it that way;
 - health check `GET /up` (Laravel's health route, open without a login), restart policy `ON_FAILURE`. If any init step fails, the container exits non-zero so Railway marks the deploy failed and restarts it.
 
