@@ -1,0 +1,9 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Heimdall's queue worker (upstream run script plus a pause). When the app
+# catalogue site is unreachable, Laravel reads cURL's "connection reset" as a
+# lost database connection and the worker exits; s6 restarts it at once. The
+# pause keeps that from spinning the CPU every second.
+sleep 5
+exec \
+    s6-setuidgid abc php /app/www/artisan queue:work database --sleep=3 --tries=3

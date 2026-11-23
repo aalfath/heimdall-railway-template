@@ -25,7 +25,7 @@ ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
 COPY root/ /
 
 RUN set -eux; \
-    chmod 0755 /etc/s6-overlay/s6-rc.d/init-railway/run; \
+    chmod 0755 /etc/s6-overlay/s6-rc.d/init-railway/run /etc/s6-overlay/s6-rc.d/svc-queue/run; \
     bash -n /etc/s6-overlay/s6-rc.d/init-railway/run; \
     php -l /railway/admin.php; \
     grep -q '__PORT__' /defaults/railway/site.conf
